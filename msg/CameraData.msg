@@ -1,0 +1,2 @@
+sensor_msgs/Image rgb_image
+sensor_msgs/Image thresh_image

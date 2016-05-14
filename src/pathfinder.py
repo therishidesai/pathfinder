@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import roslib
+roslib.load_manifest('pathfinder')
 import sys
 import rospy
 import cv2
@@ -7,37 +8,29 @@ from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image, CompressedImage
 import numpy as np
 from matplotlib import pyplot as plt
+from pathfinder.msg import CameraData
 
 class pathfinder:
 
-    cnt = 0
-    depth_thresh = 0
+    cv_image = None
+    cv_depth_image = None
+    thresh = None
+
     def __init__(self):
         self.bridge = CvBridge()
-        #self.image_sub = rospy.Subscriber("/camera/color/image_raw", Image, self.rgb_callback)
-        self.depth_image_sub = rospy.Subscriber("/camera/depth/image_raw", Image, self.depth_filter)
+        cam_data = rospy.Subscriber("camera_data", CamerData, self.rgb_filter)
 
-    def rgb_callback(self, data):
-        cv_image=0
-        try:
-            cv_image = self.bridge.imgmsg_to_cv2(data, "passthrough")
-        except CvBridgeError as e:
-            print e
-        cv_image = cv2.flip(cv_image,0)
-        cv_image_mask = cv2.bitwise_and(cv_image, cv_image, mask=self.depth_thresh)
+
+    def rgb_filter(self, data):
+        cv_image = self.bridge.imgmsg_to_csv(data.rgb_image)
+        depth_thresh = self.bridge.imgmsg_to_csv(data.thresh_image)
+        cv_image_mask = cv2.bitwise_and(cv_image, cv_image, mask=depth_thresh)
         grayscale_thresh = self.gray_filter(cv_image_mask)
         ret, contours, hierarchy = cv2.findContours(grayscale_thresh,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
         self.cnt = self.contour_filter(contours)
         img = cv2.drawContours(cv_image, self.cnt, -1, (0,255,0), 3)
         cv2.fillPoly(cv_image, pts =[self.cnt], color=(0,255,0))
-        #print cv_image.shape
-        #edges = cv2.Canny(thresh,50,150,apertureSize = 3)
-        #plt.subplot(224), plt.plot(hist_mask)
-        cv2.imshow("Image Window", cv_image)
-        cv2.imshow("Mask", cv_image_mask)
-        cv2.imshow("Threshold", grayscale_thresh)
-        #cv2.imshow("HSV", hsv)
-        cv2.waitKey(3)
+        return cv_image
 
     def hsv_filter(self, cv_image):
         hsv = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
@@ -52,25 +45,6 @@ class pathfinder:
         np_upper_hsv = np.array(upper_hsv, dtype=np.uint8)
         thresh = cv2.inRange(hsv, np_lower_hsv, np_upper_hsv)
         return thresh
-
-    def depth_filter(self, data):
-        cv_depth_image=0
-        try:
-            cv_depth_image = self.bridge.imgmsg_to_cv2(data, "passthrough")
-        except CvBridgeError as e:
-            print e
-
-        cv_depth_image = cv2.flip(cv_depth_image, 0)
-
-        #cv_depth_image = cv2.resize(cv_depth_image, (640,480), interpolation = cv2.INTER_AREA)
-        lower =0
-        upper =4000
-        thresh = cv2.inRange(cv_depth_image, lower, upper)
-        self.depth_thresh = cv2.resize(thresh, (640,480), interpolation = cv2.INTER_AREA)
-        #ret, thresh = cv2.threshold(cv_depth_image, 127, 255, cv2.THRESH_BINARY)
-        cv2.imshow("Depth Mask", thresh)
-        cv2.imshow("Depth Image",cv_depth_image)
-        rospy.Subscriber("/camera/color/image_raw", Image, self.rgb_callback)
 
     def gray_filter(self, cv_image):
         grayscale = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
@@ -90,14 +64,12 @@ class pathfinder:
         else:
             return int(hsv+(float(hsv/2.0)))
 
-def nothing(x):
-    pass
-
 def main():
-    pf = pathfinder()
     rospy.init_node('pathfinder', anonymous=True)
-    cv2.namedWindow('Image Window')
+    pf = pathfinder()
+    print "test"
 
+    #cv2.namedWindow('Image Window')
     try:
         rospy.spin()
     except KeyboardInterrupt:
