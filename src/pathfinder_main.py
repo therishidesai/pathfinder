@@ -18,19 +18,22 @@ class pathfinder:
 
     def __init__(self):
         self.bridge = CvBridge()
-        cam_data = rospy.Subscriber("camera_data", CamerData, self.rgb_filter)
-
+        cam_data = rospy.Subscriber("camera_data", CameraData, self.rgb_filter)
 
     def rgb_filter(self, data):
-        cv_image = self.bridge.imgmsg_to_csv(data.rgb_image)
-        depth_thresh = self.bridge.imgmsg_to_csv(data.thresh_image)
+        cv_image = self.bridge.imgmsg_to_cv2(data.rgb_image)
+        cv_image = cv2.flip(cv_image, 0)
+        depth_thresh = self.bridge.imgmsg_to_cv2(data.thresh_image)
+        #depth_thresh = cv2.resize(depth_thresh, (640,480), interpolation=cv2.INTER_AREA)
         cv_image_mask = cv2.bitwise_and(cv_image, cv_image, mask=depth_thresh)
         grayscale_thresh = self.gray_filter(cv_image_mask)
         ret, contours, hierarchy = cv2.findContours(grayscale_thresh,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
         self.cnt = self.contour_filter(contours)
         img = cv2.drawContours(cv_image, self.cnt, -1, (0,255,0), 3)
         cv2.fillPoly(cv_image, pts =[self.cnt], color=(0,255,0))
-        return cv_image
+        cv2.imshow("Image Window", cv_image)
+        #cv2.imshow("Grayscale", grayscale_thresh)
+        cv2.waitKey(3)
 
     def hsv_filter(self, cv_image):
         hsv = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
@@ -49,9 +52,10 @@ class pathfinder:
     def gray_filter(self, cv_image):
         grayscale = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
         mask = np.zeros(cv_image.shape[:2], np.uint8)
-        mask[200:500, 200:400] = 255
+        mask[300:500, 150:450] = 255
         masked_img = cv2.bitwise_and(cv_image,cv_image,mask = mask)
         mean_gray = cv2.mean(grayscale, mask=mask)
+        #cv2.imshow("Mask", mask)
         thresh = cv2.inRange(grayscale, mean_gray[0]-20, mean_gray[0]+20)
         return thresh
 
@@ -67,7 +71,7 @@ class pathfinder:
 def main():
     rospy.init_node('pathfinder', anonymous=True)
     pf = pathfinder()
-    print "test"
+    #print "test"
 
     #cv2.namedWindow('Image Window')
     try:
